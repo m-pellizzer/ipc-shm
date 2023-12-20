@@ -77,12 +77,17 @@ static void ipc_shm_softirq(unsigned long arg)
 					|| (priv.id[i].irq_num == IPC_IRQ_NONE))
 			continue;
 
-		/* call upper layer callback until work is done */
-		do {
-			work = priv.rx_cb(i, budget);
-			/* work not done, yield and wait for reschedule */
+		/* Do the budgeted work */
+		work = priv.rx_cb(i, budget);
+
+		/* If we used the full budget, schedule again.
+		 * We don't know how much work remains until we do the work.
+		 * The next tasklet will check for more work
+		 */
+		if (work >= budget)
 			tasklet_schedule(&ipc_shm_rx_tasklet);
-		} while (work >= budget);
+		else
+			ipc_hw_irq_enable(i);
 
 		/* work done, re-enable irq */
 		ipc_hw_irq_enable(i);
