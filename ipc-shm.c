@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2018-2023 NXP
+ * Copyright 2018-2024 NXP
  */
 #include "ipc-os.h"
 #include "ipc-hw.h"
@@ -307,8 +307,14 @@ static int ipc_channel_rx(const uint8_t instance, int chan_id, int budget)
 		buf_addr = pool->remote_pool_addr +
 			(bd.buf_id * pool->buf_size);
 
-		mchan->rx_cb(mchan->cb_arg, instance, chan->id,
+		/* check if buf_addr is valid */
+		if ((buf_addr >= ipc_os_get_remote_shm(instance)) &&
+			((buf_addr + pool->buf_size) <=
+				ipc_os_get_remote_shm(instance) +
+			ipc_shm_priv_data[instance].shm_size)) {
+			mchan->rx_cb(mchan->cb_arg, instance, chan->id,
 				(void *)buf_addr, bd.data_size);
+		}
 		work++;
 	}
 
@@ -785,6 +791,13 @@ void *ipc_shm_acquire_buf(const uint8_t instance, int chan_id, size_t size)
 
 	buf_addr = pool->local_pool_addr +
 		(uint32_t)(bd.buf_id * pool->buf_size);
+
+	/* check if buf_addr is valid */
+	if ((buf_addr < ipc_os_get_local_shm(instance)) ||
+		((buf_addr + pool->buf_size) > ipc_os_get_local_shm(instance) +
+		ipc_shm_priv_data[instance].shm_size)) {
+		buf_addr = NULL;
+	}
 
 	shm_dbg("ch %d: pool %d: acquired buffer %d with address %lx\n",
 			chan_id, pool_id, bd.buf_id, buf_addr);
