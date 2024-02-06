@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2019,2021-2023 NXP
+ * Copyright 2019,2021-2024 NXP
  */
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/mod_devicetable.h>
 #include <linux/uio_driver.h>
 #include <linux/cdev.h>
+#include <linux/version.h>
 
 #include "ipc-shm.h"
 #include "ipc-os.h"
@@ -296,7 +297,12 @@ static int ipc_shm_uio_probe(struct platform_device *pdev)
 		shm_err("Failed to add cdev\n");
 		goto fail_add_cdev;
 	}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
 	ipc_pdev_priv.cdev_class = class_create(THIS_MODULE, IPC_CDEV_NAME);
+#else
+	ipc_pdev_priv.cdev_class = class_create(IPC_CDEV_NAME);
+#endif
 	if (!ipc_pdev_priv.cdev_class) {
 		err = -EEXIST;
 		shm_err("Failed to create class\n");
@@ -326,9 +332,8 @@ fail_alloc_chrdev_region:
 	return err;
 }
 
-
 /* Platform driver remove methods */
-static int ipc_shm_uio_remove(struct platform_device *pdev)
+static void ipc_shm_uio_remove(struct platform_device *pdev)
 {
 	int i;
 
@@ -348,8 +353,6 @@ static int ipc_shm_uio_remove(struct platform_device *pdev)
 	}
 
 	shm_dbg("device removed\n");
-
-	return 0;
 }
 
 void *ipc_os_map_intc(void)
@@ -376,7 +379,7 @@ static struct platform_driver ipc_shm_driver = {
 		.of_match_table = ipc_shm_ids,
 	},
 	.probe = ipc_shm_uio_probe,
-	.remove = ipc_shm_uio_remove,
+	.remove_new = ipc_shm_uio_remove,
 };
 
 module_platform_driver(ipc_shm_driver);

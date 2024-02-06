@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2023 NXP
+ * Copyright 2023-2024 NXP
  */
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -11,6 +11,7 @@
 #include <linux/of_address.h>
 #include <linux/wait.h>
 #include <asm/errno.h>
+#include <linux/version.h>
 
 #define DEVICE_NAME		"ipc-shm-cdev"
 #define DRIVER_VERSION	"2.0"
@@ -314,7 +315,11 @@ static int ipc_cdev_init(void)
 		return err;
 	}
 	/* Create class and init character device */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
 	ipc_cdev_priv.ipc_class = class_create(THIS_MODULE, DEVICE_NAME);
+#else
+	ipc_cdev_priv.ipc_class = class_create(DEVICE_NAME);
+#endif
 	cdev_init(&ipc_cdev_priv.ipc_cdev, &ipc_cdev_fops);
 	ipc_cdev_priv.ipc_cdev.owner = THIS_MODULE;
 	cdev_add(&ipc_cdev_priv.ipc_cdev, ipc_cdev_priv.dev_major_num, 1);
