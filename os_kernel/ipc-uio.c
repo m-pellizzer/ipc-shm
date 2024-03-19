@@ -136,7 +136,7 @@ static int ipc_uio_init(struct ipc_uio_cdev_data *data)
 	struct ipc_shm_cfg *cfg = &data->cfg;
 
 	err = sprintf(ipc_pdev_priv.uio_id[instance].uio_name,
-						"instance_%d", instance);
+			"instance_%d", instance);
 	/* init MSCM HW for MSI inter-core interrupts */
 	err = ipc_hw_init(instance, cfg);
 	if (err)
@@ -145,8 +145,7 @@ static int ipc_uio_init(struct ipc_uio_cdev_data *data)
 	if (cfg->inter_core_rx_irq == IPC_IRQ_NONE)
 		return 0;
 	/* get Linux IRQ number */
-	irq = platform_get_irq(ipc_pdev_priv.ipc_pdev,
-						cfg->inter_core_rx_irq);
+	irq = platform_get_irq(ipc_pdev_priv.ipc_pdev, cfg->inter_core_rx_irq);
 	if (irq < 0) {
 		shm_dbg("Failed to get IRQ\n");
 		return irq;
@@ -162,8 +161,7 @@ static int ipc_uio_init(struct ipc_uio_cdev_data *data)
 		}
 	}
 	ipc_pdev_priv.irq_num_init[instance] = irq;
-	ipc_pdev_priv.uio_id[instance].dev
-					= &ipc_pdev_priv.ipc_pdev->dev;
+	ipc_pdev_priv.uio_id[instance].dev = &ipc_pdev_priv.ipc_pdev->dev;
 	/* Register UIO device */
 	atomic_set(&ipc_pdev_priv.uio_id[instance].refcnt, 1);
 	ipc_pdev_priv.uio_id[instance].info.version = IPC_UIO_VERSION;
@@ -273,11 +271,9 @@ static int ipc_shm_uio_probe(struct platform_device *pdev)
 	ipc_pdev_priv.ipc_pdev = pdev;
 
 	/* map MSCM register configuration space */
-	res = platform_get_resource(ipc_pdev_priv.ipc_pdev,
-						IORESOURCE_MEM, 0);
+	res = platform_get_resource(ipc_pdev_priv.ipc_pdev, IORESOURCE_MEM, 0);
 	ipc_pdev_priv.pdev_reg = devm_ioremap_resource(
-				&ipc_pdev_priv.ipc_pdev->dev,
-				res);
+					&ipc_pdev_priv.ipc_pdev->dev, res);
 	if (IS_ERR_OR_NULL(ipc_pdev_priv.pdev_reg)) {
 		shm_err("Failed to map MSCM register space\n");
 		return -ENOMEM;
@@ -285,8 +281,7 @@ static int ipc_shm_uio_probe(struct platform_device *pdev)
 
 	/* Create a chrdev to initial user-kernel communication */
 	/* Dynamic allocate device major number */
-	err = alloc_chrdev_region(&ipc_pdev_priv.major, 0, 1,
-					IPC_CDEV_NAME);
+	err = alloc_chrdev_region(&ipc_pdev_priv.major, 0, 1, IPC_CDEV_NAME);
 	if (err < 0) {
 		shm_err("Failed to alloc chrdev region\n");
 		goto fail_alloc_chrdev_region;
@@ -316,7 +311,7 @@ static int ipc_shm_uio_probe(struct platform_device *pdev)
 	}
 	mutex_init(&mmap_device_mutex);
 	shm_dbg("%s registered with major %d\n",
-			IPC_CDEV_NAME, MAJOR(ipc_pdev_priv.major));
+		IPC_CDEV_NAME, MAJOR(ipc_pdev_priv.major));
 
 	shm_dbg("device ready\n");
 
@@ -342,10 +337,9 @@ static void ipc_shm_uio_remove(struct platform_device *pdev)
 	cdev_del(&ipc_pdev_priv.cdev);
 	unregister_chrdev_region(ipc_pdev_priv.major, 1);
 	for (i = 0; i < IPC_SHM_MAX_INSTANCES; i++) {
-		if (ipc_pdev_priv.uio_id[i].state
-				== IPC_SHM_INSTANCE_ENABLED) {
+		if (ipc_pdev_priv.uio_id[i].state == IPC_SHM_INSTANCE_ENABLED) {
 			ipc_pdev_priv.uio_id[i].state
-					= IPC_SHM_INSTANCE_DISABLED;
+				= IPC_SHM_INSTANCE_DISABLED;
 			if (ipc_pdev_priv.irq_num_init[i] == IPC_IRQ_NONE)
 				continue;
 			uio_unregister_device(&ipc_pdev_priv.uio_id[i].info);

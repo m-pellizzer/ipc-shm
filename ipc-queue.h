@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2018-2019,2023 NXP
+ * Copyright 2018-2019,2023-2024 NXP
  */
 #ifndef IPC_QUEUE_H
 #define IPC_QUEUE_H
@@ -49,11 +49,79 @@ struct ipc_queue {
 	struct ipc_ring *pop_ring;
 };
 
-int ipc_queue_init(struct ipc_queue *queue, uint16_t elem_num,
-	uint8_t elem_size, uintptr_t push_ring_addr, uintptr_t pop_ring_addr);
-int ipc_queue_push(struct ipc_queue *queue, const void *buf);
-int ipc_queue_pop(struct ipc_queue *queue, void *buf);
-int ipc_queue_check_integrity(struct ipc_queue *queue);
+/**
+ * struct ipc_queue_data -  stores queue data used for initialization
+ * @elem_size:  element size in bytes (8-byte multiple)
+ * @elem_num:   number of elements in queue
+ * @queue_type: indicate queue of channel or pool buffer
+ * @push_addr:  push buffer ring mapped in local shared memory
+ * @pop_addr:   pop buffer ring mapped in remote shared memory
+ *
+ */
+struct ipc_queue_data {
+	uint8_t elem_size;
+	uint16_t elem_num;
+	enum ipc_shm_queue_type queue_type;
+	uintptr_t push_addr;
+	uintptr_t pop_addr;
+};
+
+/**
+ * ipc_queue_init() - initializes queue and maps push/pop rings in memory
+ * @queue:            [IN] queue pointer
+ * @queue_data:       [IN] stores queue data use to initialize a queue
+ *
+ * Element size must be 8-byte multiple to ensure memory alignment.
+ *
+ * Queue will add one additional sentinel element to its size for lock-free
+ * single-producer - single-consumer thread-safety.
+ *
+ * Return: IPC_SHM_E_OK on success, error code otherwise
+ */
+int8_t ipc_queue_init(struct ipc_queue *queue,
+			struct ipc_queue_data queue_data);
+
+/**
+ * ipc_queue_free() - free a queue
+ * @queue:            [IN] queue pointer
+ *
+ * Clear queue sentinel and queue pointer
+ */
+void ipc_queue_free(struct ipc_queue *queue);
+
+/**
+ * ipc_queue_push() - pushes element into the queue
+ * @queue:            [IN] queue pointer
+ * @buf:              [IN] pointer to element to be pushed into the queue
+ *
+ * Element is pushed into the push ring that is mapped in local shared memory
+ * and corresponds to the remote pop ring.
+ *
+ * Return:	IPC_SHM_E_OK on success, error code otherwise
+ */
+int8_t ipc_queue_push(struct ipc_queue *queue, const void *buf);
+
+/**
+ * ipc_queue_pop() - removes element from queue
+ * @queue:           [IN] queue pointer
+ * @buf:             [OUT] pointer where to copy the removed element
+ *
+ * Element is removed from pop ring that is mapped in remote shared memory and
+ * it corresponds to the remote push ring.
+ *
+ * Return:	IPC_SHM_E_OK on success, error code otherwise
+ */
+int8_t ipc_queue_pop(struct ipc_queue *queue, void *buf);
+
+/**
+ * ipc_queue_check_integrity() - check if the sentinel was not overwritten
+ * @queue:	[IN] queue pointer
+ *
+ * Check if the sentinel was not overwritten
+ *
+ * Return: IPC_SHM_E_OK on success, error code otherwise
+ */
+int8_t ipc_queue_check_integrity(struct ipc_queue *queue);
 
 /**
  * ipc_queue_mem_size() - return queue footprint in local mapped memory

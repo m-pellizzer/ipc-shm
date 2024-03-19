@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2018-2023 NXP
+ * Copyright 2018-2024 NXP
  */
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -102,8 +102,8 @@ uint32_t ipc_strtol(char *src)
  * data channel Rx callback: print message, release buffer and signal the
  * completion variable.
  */
-void data_chan_rx_cb(void *arg, const uint8_t instance, int chan_id,
-		void *buf, size_t size)
+void data_chan_rx_cb(void *arg, const uint8_t instance, uint8_t chan_id,
+		void *buf, uint32_t size)
 {
 	int err = 0;
 	struct ipc_sample_app *cb_arg_sample =
@@ -113,7 +113,7 @@ void data_chan_rx_cb(void *arg, const uint8_t instance, int chan_id,
 	WARN_ON(size > MAX_SAMPLE_MSG_LEN);
 
 	/* process the received data */
-	sample_info("ch %d << %ld bytes: %s\n", chan_id, size, (char *)buf);
+	sample_info("ch %d << %d bytes: %s\n", chan_id, size, (char *)buf);
 
 	/* consume received data: get number of message */
 	/* Note: without being copied locally */
@@ -133,7 +133,7 @@ void data_chan_rx_cb(void *arg, const uint8_t instance, int chan_id,
 /*
  * control channel Rx callback: print control message
  */
-void ctrl_chan_rx_cb(void *arg, const uint8_t instance, int chan_id,
+void ctrl_chan_rx_cb(void *arg, const uint8_t instance, uint8_t chan_id,
 		void *mem)
 {
 	struct ipc_sample_app *cb_arg_sample =

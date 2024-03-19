@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2023 NXP
+ * Copyright 2023-2024 NXP
  */
 #include <linux/ioport.h>
 #include <linux/io.h>
@@ -44,7 +44,7 @@ struct ipc_os_priv_instance {
  */
 static struct ipc_os_priv {
 	struct ipc_os_priv_instance id[IPC_SHM_MAX_INSTANCES];
-	int (*rx_cb)(const uint8_t instance, int budget);
+	uint32_t (*rx_cb)(const uint8_t instance, int budget);
 	int irq_num_init[IPC_SHM_MAX_INSTANCES];
 } priv;
 
@@ -55,7 +55,7 @@ static DECLARE_TASKLET(ipc_shm_rx_tasklet, ipc_shm_softirq, 0);
 static DECLARE_TASKLET_OLD(ipc_shm_rx_tasklet, ipc_shm_softirq);
 #endif
 
-int ipc_hw_init(const uint8_t instance, const struct ipc_shm_cfg *cfg)
+int8_t ipc_hw_init(const uint8_t instance, const struct ipc_shm_cfg *cfg)
 {
 	(void)instance;
 	(void)cfg;
@@ -164,8 +164,8 @@ static irqreturn_t ipc_shm_hardirq(int irq, void *dev)
  *
  * Return: 0 on success, error code otherwise
  */
-int ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
-		int (*rx_cb)(const uint8_t, int))
+int8_t ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
+		uint32_t (*rx_cb)(const uint8_t, int))
 {
 	struct resource *res;
 	int err;
@@ -318,15 +318,13 @@ void ipc_os_unmap_intc(void *addr)
  *
  * Return: work done, error code otherwise
  */
-int ipc_os_poll_channels(const uint8_t instance)
+int8_t ipc_os_poll_channels(const uint8_t instance)
 {
 	/* the softirq will handle rx operation if rx interrupt is configured */
 	if (priv.id[instance].irq_num == IPC_IRQ_NONE) {
-		if (priv.rx_cb != NULL) {
+		if (priv.rx_cb != NULL)
 			return priv.rx_cb(instance, IPC_SOFTIRQ_BUDGET);
-		} else {
-			return -EINVAL;
-		}
+		return -EINVAL;
 	}
 
 	return -EOPNOTSUPP;

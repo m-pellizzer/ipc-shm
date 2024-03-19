@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2018-2019,2021,2023 NXP
+ * Copyright 2018-2019,2021,2023-2024 NXP
  */
 #ifndef IPC_HW_H
 #define IPC_HW_H
 
-int ipc_hw_init(const uint8_t instance, const struct ipc_shm_cfg *cfg);
+int8_t ipc_hw_init(const uint8_t instance, const struct ipc_shm_cfg *cfg);
 
 void ipc_hw_free(const uint8_t instance);
 
@@ -21,7 +21,7 @@ void ipc_hw_irq_clear(const uint8_t instance);
 
 struct ipc_shm_remote_core;
 struct ipc_shm_local_core;
-int _ipc_hw_init(const uint8_t instance, int tx_irq, int rx_irq,
+int8_t _ipc_hw_init(const uint8_t instance, int tx_irq, int rx_irq,
 		 const struct ipc_shm_remote_core *remote_core,
 		 const struct ipc_shm_local_core *local_core, void *mscm_addr);
 

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2018-2019,2021,2023 NXP
+ * Copyright 2018-2019,2021,2023-2024 NXP
  */
 #include <linux/io.h>
 
@@ -58,7 +58,7 @@ int ipc_hw_get_rx_irq(const uint8_t instance)
  *         invalid remote core, -ENOMEM for failing to map MSCM address space,
  *         -EACCES for failing to access MSCM registers
  */
-int ipc_hw_init(const uint8_t instance, const struct ipc_shm_cfg *cfg)
+int8_t ipc_hw_init(const uint8_t instance, const struct ipc_shm_cfg *cfg)
 {
 	/* map MSCM hardware peripheral block registers */
 	void *addr = ipc_os_map_intc();
@@ -73,7 +73,7 @@ int ipc_hw_init(const uint8_t instance, const struct ipc_shm_cfg *cfg)
  *
  * Low level variant of ipc_hw_init() used by UIO device implementation.
  */
-int _ipc_hw_init(const uint8_t instance, int tx_irq, int rx_irq,
+int8_t _ipc_hw_init(const uint8_t instance, int tx_irq, int rx_irq,
 		 const struct ipc_shm_remote_core *remote_core,
 		 const struct ipc_shm_local_core *local_core, void *mscm_addr)
 {

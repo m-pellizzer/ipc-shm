@@ -1,10 +1,9 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2019-2023 NXP
+ * Copyright 2019-2024 NXP
  */
 #include <fcntl.h>
 #include <unistd.h>
-#include <stdio.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <pthread.h>
@@ -70,7 +69,7 @@ struct ipc_os_priv_instance {
 	size_t local_shm_offset;
 	size_t remote_shm_offset;
 	size_t shm_size;
-	int (*rx_cb)(const uint8_t instance, int budget);
+	uint32_t (*rx_cb)(const uint8_t instance, int budget);
 	pthread_t irq_thread_id;
 };
 
@@ -218,8 +217,8 @@ static void *ipc_shm_softirq(void *arg)
  *
  * Return: 0 on success, error code otherwise
  */
-int ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
-		int (*rx_cb)(const uint8_t, int))
+int8_t ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
+		uint32_t (*rx_cb)(const uint8_t, int))
 {
 	size_t page_size = sysconf(_SC_PAGE_SIZE);
 	off_t page_phys_addr;
@@ -228,6 +227,9 @@ int ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
 	struct sched_param irq_thread_param;
 	pthread_attr_t irq_thread_attr;
 	struct ipc_uio_cdev_data data_cfg;
+	char uio_dev_name[IPC_SHM_UIO_BUF_LEN];
+	char dev_uio[IPC_SHM_UIO_BUF_LEN*2];
+
 
 	if (!rx_cb)
 		return -EINVAL;
@@ -279,10 +281,8 @@ int ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
 		= mmap(NULL,
 			ipc_os_priv.id[instance].local_shm_offset
 				+ cfg->shm_size,
-			PROT_READ | PROT_WRITE,
-			MAP_SHARED,
-			ipc_os_priv.dev_mem_fd,
-			page_phys_addr);
+			PROT_READ | PROT_WRITE, MAP_SHARED,
+			ipc_os_priv.dev_mem_fd, page_phys_addr);
 	if (ipc_os_priv.id[instance].local_shm_map == MAP_FAILED) {
 		shm_err("Can't map memory: %lx\n", cfg->local_shm_addr);
 		err = -ENOMEM;
@@ -302,10 +302,8 @@ int ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
 		= mmap(NULL,
 			ipc_os_priv.id[instance].remote_shm_offset
 				+ cfg->shm_size,
-			PROT_READ | PROT_WRITE,
-			MAP_SHARED,
-			ipc_os_priv.dev_mem_fd,
-			page_phys_addr);
+			PROT_READ | PROT_WRITE, MAP_SHARED,
+			ipc_os_priv.dev_mem_fd, page_phys_addr);
 	if (ipc_os_priv.id[instance].remote_shm_map == MAP_FAILED) {
 		shm_err("Can't map memory: %lx\n", cfg->remote_shm_addr);
 		err = -ENOMEM;
@@ -321,10 +319,10 @@ int ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
 	data_cfg.instance = instance;
 	data_cfg.cfg = *cfg;
 
-	err = write(ipc_os_priv.ipc_cdev_fd,
-			&data_cfg,
-			sizeof(struct ipc_uio_cdev_data));
+	err = write(ipc_os_priv.ipc_cdev_fd, &data_cfg,
+		sizeof(struct ipc_uio_cdev_data));
 	if (err < 0) {
+		shm_err("Can't write data to kernel space %d\n", err);
 		err = -EINVAL;
 		goto err_unmap_remote_shm;
 	}
@@ -335,11 +333,9 @@ int ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
 	}
 
 	/* search for UIO device name */
-	char uio_dev_name[IPC_SHM_UIO_BUF_LEN];
-	char dev_uio[IPC_SHM_UIO_BUF_LEN*2];
-
 	err = get_uio_dev_name(uio_dev_name, instance);
 	if (err != 0) {
+		shm_err("Can't find uio device of inst %d\n", instance);
 		err = -ENOENT;
 		goto err_unmap_remote_shm;
 	}
@@ -375,9 +371,7 @@ int ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
 	}
 
 	err = pthread_create(&ipc_os_priv.id[instance].irq_thread_id,
-				&irq_thread_attr,
-				ipc_shm_softirq,
-				&ipc_os_priv.id[instance]);
+		&irq_thread_attr, ipc_shm_softirq, &ipc_os_priv.id[instance]);
 	if (err == -1) {
 		shm_err("Can't start Rx softirq thread\n");
 		goto err_close_uio_dev;
@@ -449,9 +443,8 @@ void ipc_os_free(const uint8_t instance)
 	 * only when all instances are disabled
 	 */
 	for (i = 0; i < IPC_SHM_MAX_INSTANCES; i++) {
-		if (ipc_os_priv.id[i].state == IPC_SHM_INSTANCE_ENABLED) {
+		if (ipc_os_priv.id[i].state == IPC_SHM_INSTANCE_ENABLED)
 			return;
-		}
 	}
 	close(ipc_os_priv.ipc_cdev_fd);
 	close(ipc_os_priv.dev_mem_fd);
@@ -483,15 +476,14 @@ uintptr_t ipc_os_get_remote_shm(const uint8_t instance)
  *
  * Return: work done, error code otherwise
  */
-int ipc_os_poll_channels(const uint8_t instance)
+int8_t ipc_os_poll_channels(const uint8_t instance)
 {
 	/* the softirq will handle rx operation if rx interrupt is configured */
 	if (ipc_os_priv.id[instance].irq_num == IPC_IRQ_NONE) {
 		if (ipc_os_priv.id[instance].rx_cb != NULL)
 			return ipc_os_priv.id[instance].rx_cb(instance,
 							IPC_SOFTIRQ_BUDGET);
-		else
-			return -EINVAL;
+		return -EINVAL;
 	}
 
 	return -EOPNOTSUPP;
@@ -502,9 +494,8 @@ static void ipc_send_uio_cmd(uint32_t uio_fd, int32_t cmd)
 	int ret;
 
 	ret = write(uio_fd, &cmd, sizeof(int));
-	if (ret != sizeof(int)) {
+	if (ret != sizeof(int))
 		shm_dbg("Failed to execute UIO command %d", cmd);
-	}
 }
 
 /**
@@ -531,7 +522,7 @@ void ipc_hw_irq_notify(const uint8_t instance)
 	ipc_send_uio_cmd(ipc_os_priv.id[instance].uio_fd, IPC_UIO_TRIGGER_CMD);
 }
 
-int ipc_hw_init(const uint8_t instance, const struct ipc_shm_cfg *cfg)
+int8_t ipc_hw_init(const uint8_t instance, const struct ipc_shm_cfg *cfg)
 {
 	/* dummy implementation: ipc-hw init is handled by kernel UIO module */
 	return 0;

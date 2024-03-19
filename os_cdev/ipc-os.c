@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2023 NXP
+ * Copyright 2023-2024 NXP
  */
 #include <fcntl.h>
 #include <unistd.h>
@@ -80,7 +80,7 @@ static struct ipc_os_priv {
 	int dev_mem_fd;
 	pthread_t irq_thread_id;
 	struct ipc_os_priv_instance id[IPC_SHM_MAX_INSTANCES];
-	int (*rx_cb)(const uint8_t instance, int budget);
+	uint32_t (*rx_cb)(const uint8_t instance, int budget);
 } priv;
 
 /* Rx sotfirq thread */
@@ -130,8 +130,8 @@ static void *ipc_shm_softirq(void *arg)
  *
  * Return: 0 on success, error code otherwise
  */
-int ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
-		int (*rx_cb)(const uint8_t, int))
+int8_t ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
+		uint32_t (*rx_cb)(const uint8_t, int))
 {
 	size_t page_size = sysconf(_SC_PAGE_SIZE);
 	off_t page_phys_addr;
@@ -363,7 +363,7 @@ uintptr_t ipc_os_get_remote_shm(const uint8_t instance)
  *
  * Return: work done, error code otherwise
  */
-int ipc_os_poll_channels(const uint8_t instance)
+int8_t ipc_os_poll_channels(const uint8_t instance)
 {
 	/* the softirq will handle rx operation if rx interrupt is configured */
 	if (priv.id[instance].irq_num == IPC_IRQ_NONE) {
@@ -403,7 +403,7 @@ void ipc_hw_irq_notify(const uint8_t instance)
 			IPC_CDEV_CMD_TRIGGER_TX_IRQ, instance);
 }
 
-int ipc_hw_init(const uint8_t instance, const struct ipc_shm_cfg *cfg)
+int8_t ipc_hw_init(const uint8_t instance, const struct ipc_shm_cfg *cfg)
 {
 	/* dummy implementation: ipc-hw init is handled by kernel module */
 	return 0;

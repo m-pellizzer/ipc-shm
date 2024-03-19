@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2019-2023 NXP
+ * Copyright 2019-2024 NXP
  */
 #include <errno.h>
 #include <stdint.h>
@@ -170,8 +170,8 @@ void ipc_memcpy_fromio(void *dst, void *buf, size_t count)
  * data channel Rx callback: print message, release buffer and signal the
  * completion variable.
  */
-void data_chan_rx_cb(void *arg, const uint8_t instance, int chan_id,
-		void *buf, size_t data_size)
+void data_chan_rx_cb(void *arg, const uint8_t instance, uint8_t chan_id,
+		void *buf, uint32_t data_size)
 {
 	int err = 0;
 	char *endptr;
@@ -181,7 +181,7 @@ void data_chan_rx_cb(void *arg, const uint8_t instance, int chan_id,
 
 	/* process the received data */
 	ipc_memcpy_fromio(tmp, (char *)buf, data_size);
-	sample_info("ch %d << %ld bytes: %s\n", chan_id, data_size, tmp);
+	sample_info("ch %d << %d bytes: %s\n", chan_id, data_size, tmp);
 
 	/* consume received data: get number of message */
 	/* Note: without being copied locally */
@@ -201,7 +201,7 @@ void data_chan_rx_cb(void *arg, const uint8_t instance, int chan_id,
 /*
  * control channel Rx callback: print control message
  */
-void ctrl_chan_rx_cb(void *arg, const uint8_t instance, int chan_id,
+void ctrl_chan_rx_cb(void *arg, const uint8_t instance, uint8_t chan_id,
 		void *mem)
 {
 	/* temp buffer for string operations that do unaligned SRAM accesses */

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2018-2023 NXP
+ * Copyright 2018-2024 NXP
  */
 #include <linux/ioport.h>
 #include <linux/io.h>
@@ -54,7 +54,7 @@ struct ipc_os_priv_instance {
  */
 static struct ipc_os_priv {
 	struct ipc_os_priv_instance id[IPC_SHM_MAX_INSTANCES];
-	int (*rx_cb)(const uint8_t instance, int budget);
+	uint32_t (*rx_cb)(const uint8_t instance, int budget);
 	int irq_num_init[IPC_SHM_MAX_INSTANCES];
 } priv;
 
@@ -124,8 +124,8 @@ static irqreturn_t ipc_shm_hardirq(int irq, void *dev)
  *
  * Return: 0 on success, error code otherwise
  */
-int ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
-		int (*rx_cb)(const uint8_t, int))
+int8_t ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
+		uint32_t (*rx_cb)(const uint8_t, int))
 {
 	struct device_node *mscm = NULL;
 	struct resource *res;
@@ -141,7 +141,7 @@ int ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
 
 	/* request and map local physical shared memory */
 	res = request_mem_region((phys_addr_t)cfg->local_shm_addr,
-				 cfg->shm_size, DRIVER_NAME" local");
+		cfg->shm_size, DRIVER_NAME" local");
 	if (!res) {
 		shm_err("Unable to reserve local shm region\n");
 		return -EADDRINUSE;
@@ -205,10 +205,10 @@ int ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
 	if (priv.id[instance].irq_num != IPC_IRQ_NONE) {
 		/* init rx interrupt */
 		err = request_irq(priv.id[instance].irq_num, ipc_shm_hardirq,
-							0, DRIVER_NAME, &priv);
+			0, DRIVER_NAME, &priv);
 		if (err) {
 			shm_err("Request interrupt %d failed\n",
-						priv.id[instance].irq_num);
+				priv.id[instance].irq_num);
 			goto err_unmap_remote_shm;
 		}
 	}
@@ -234,12 +234,11 @@ err_release_local_region:
  */
 void ipc_os_free(const uint8_t instance)
 {
+	uint8_t inst_id = 0;
+
 	priv.id[instance].state = IPC_SHM_INSTANCE_DISABLED;
 	/* disable hardirq */
 	ipc_hw_irq_disable(instance);
-
-	/* kill softirq task */
-	tasklet_kill(&ipc_shm_rx_tasklet);
 
 	/* only free irq if irq number is requested */
 	if (priv.irq_num_init[instance] != 0) {
@@ -253,6 +252,13 @@ void ipc_os_free(const uint8_t instance)
 	iounmap((void *)priv.id[instance].local_virt_shm);
 	release_mem_region((phys_addr_t)priv.id[instance].local_phys_shm,
 		priv.id[instance].shm_size);
+
+	for (inst_id = 0; inst_id < IPC_SHM_MAX_INSTANCES; inst_id++) {
+		if (priv.id[inst_id].state == IPC_SHM_INSTANCE_ENABLED)
+			return;
+	}
+	/* kill softirq task */
+	tasklet_kill(&ipc_shm_rx_tasklet);
 }
 
 /**
@@ -316,15 +322,13 @@ void ipc_os_unmap_intc(void *addr)
  *
  * Return: work done, error code otherwise
  */
-int ipc_os_poll_channels(const uint8_t instance)
+int8_t ipc_os_poll_channels(const uint8_t instance)
 {
 	/* the softirq will handle rx operation if rx interrupt is configured */
 	if (priv.id[instance].irq_num == IPC_IRQ_NONE) {
-		if (priv.rx_cb != NULL) {
+		if (priv.rx_cb != NULL)
 			return priv.rx_cb(instance, IPC_SOFTIRQ_BUDGET);
-		} else {
-			return -EINVAL;
-		}
+		return -EINVAL;
 	}
 
 	return -EOPNOTSUPP;

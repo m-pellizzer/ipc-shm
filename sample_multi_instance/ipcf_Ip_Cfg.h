@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Copyright 2020-2023 NXP
+ * Copyright 2020-2024 NXP
  */
 
 #ifndef IPCF_IP_CFG_H
@@ -17,9 +17,10 @@
 #define SAMPLE_NUM_INST		3
 
 /* callbacks for channels  - must be implemented by application*/
-void ctrl_chan_rx_cb(void *arg, const uint8_t instance, int chan_id, void *mem);
-void data_chan_rx_cb(void *arg, const uint8_t instance, int chan_id, void *buf,
-	size_t size);
+void ctrl_chan_rx_cb(void *arg, const uint8_t instance, uint8_t chan_id,
+			void *mem);
+void data_chan_rx_cb(void *arg, const uint8_t instance, uint8_t chan_id,
+			void *buf, uint32_t size);
 
 /* arguments for callbacks - must be implemented by application*/
 extern const void *rx_cb_arg;
