@@ -96,7 +96,9 @@ static int init_ipc_shm(void)
 	int err;
 	int i;
 
-	err = ipc_shm_init(&ipcf_shm_instances_cfg);
+	do {
+		err = ipc_shm_init(&ipcf_shm_instances_cfg);
+	} while (err == -EAGAIN);
 	if (err)
 		return err;
 

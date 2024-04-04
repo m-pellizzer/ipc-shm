@@ -74,7 +74,9 @@ static int init_ipc_shm(void)
 {
 	int err;
 
-	err = ipc_shm_init(&ipcf_shm_instances_cfg);
+	do {
+		err = ipc_shm_init(&ipcf_shm_instances_cfg);
+	} while (err == -EAGAIN);
 	if (err)
 		return err;
 	app.num_channels = ipcf_shm_instances_cfg.shm_cfg[0].num_channels;
