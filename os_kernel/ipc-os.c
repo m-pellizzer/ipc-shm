@@ -8,6 +8,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
 #include <linux/version.h>
+#include <linux/types.h>
 
 #include "ipc-os.h"
 #include "ipc-hw.h"
@@ -25,6 +26,19 @@
 	#error "Platform not supported"
 #endif
 
+/* Not available device specific interrupt */
+#define IPC_INVALID_IRQ  (-128)
+
+/**
+ * enum isr_rx_irq_state_type - used to indicate the IRQ state
+ *
+ * @IPC_RX_IRQ_ENABLED:   RX IRQ is disabled
+ * @IPC_RX_IRQ_DISABLED:  RX IRQ is enabled
+ */
+enum isr_rx_irq_state_type {
+	IPC_RX_IRQ_ENABLED = 0U,
+	IPC_RX_IRQ_DISABLED = 1U,
+};
 
 /**
  * struct ipc_os_priv_instance - OS specific private data each instance
@@ -35,6 +49,7 @@
  * @remote_virt_shm:    remote shared memory virtual address
  * @irq_num:            Linux IRQ number
  * @state:              state to indicate whether instance is initialized
+ * @rx_cb:              upper layer rx callback
  */
 struct ipc_os_priv_instance {
 	int shm_size;
@@ -44,19 +59,26 @@ struct ipc_os_priv_instance {
 	uintptr_t remote_virt_shm;
 	int irq_num;
 	int state;
+	uint32_t (*rx_cb)(const uint8_t instance, int budget);
 };
 
 /**
  * struct ipc_os_priv - OS specific private data
- * @id:             private data per instance
- * @rx_cb:          upper layer rx callback
- * @irq_num_init:   array to save all initialized irq
+ * @ipc_os_priv_instance: OS specific private data each instance
  */
 static struct ipc_os_priv {
 	struct ipc_os_priv_instance id[IPC_SHM_MAX_INSTANCES];
-	uint32_t (*rx_cb)(const uint8_t instance, int budget);
-	int irq_num_init[IPC_SHM_MAX_INSTANCES];
 } priv;
+
+/**
+ * contains all IRQs number (if duplicated it will be set to IPC_INVALID_IRQ)
+ * @rx_irq_num: the number of IRQ defined to handle the interrupt
+ * @rx_irq_num_state: the state of IRQ defined to handle the interrupt
+ */
+static struct {
+	int16_t rx_irq_num;
+	uint8_t rx_irq_num_state;
+} ipc_rx_irq_nums[IPC_SHM_MAX_INSTANCES];
 
 static void ipc_shm_softirq(unsigned long arg);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
@@ -78,7 +100,7 @@ static void ipc_shm_softirq(unsigned long arg)
 			continue;
 
 		/* Do the budgeted work */
-		work = priv.rx_cb(i, budget);
+		work = priv.id[i].rx_cb(i, budget);
 
 		/* If we used the full budget, schedule again.
 		 * We don't know how much work remains until we do the work.
@@ -86,11 +108,21 @@ static void ipc_shm_softirq(unsigned long arg)
 		 */
 		if (work >= budget)
 			tasklet_schedule(&ipc_shm_rx_tasklet);
-		else
-			ipc_hw_irq_enable(i);
+	}
+
+	/* re-enable all irqs routing for all instances */
+	for (i = 0; i < IPC_SHM_MAX_INSTANCES; i++) {
+		if ((priv.id[i].state == IPC_SHM_INSTANCE_DISABLED)
+			|| (ipc_rx_irq_nums[i].rx_irq_num == IPC_INVALID_IRQ)
+			|| (ipc_rx_irq_nums[i].rx_irq_num_state ==
+				IPC_RX_IRQ_ENABLED))
+			continue;
 
 		/* work done, re-enable irq */
 		ipc_hw_irq_enable(i);
+
+		/* mark IRQ as enabled */
+		ipc_rx_irq_nums[i].rx_irq_num_state = IPC_RX_IRQ_ENABLED;
 	}
 }
 
@@ -101,14 +133,20 @@ static irqreturn_t ipc_shm_hardirq(int irq, void *dev)
 
 	for (i = 0; i < IPC_SHM_MAX_INSTANCES; i++) {
 		if ((priv.id[i].state == IPC_SHM_INSTANCE_DISABLED)
-					|| (priv.id[i].irq_num == IPC_IRQ_NONE))
+				|| (priv.id[i].irq_num == IPC_IRQ_NONE))
 			continue;
 
-		/* disable notifications from remote */
-		ipc_hw_irq_disable(i);
+		if (ipc_rx_irq_nums[i].rx_irq_num == irq) {
+			/* disable notifications from remote */
+			ipc_hw_irq_disable(i);
 
-		/* clear notification */
-		ipc_hw_irq_clear(i);
+			/* clear notification */
+			ipc_hw_irq_clear(i);
+
+			/* mark IRQ as disabled */
+			ipc_rx_irq_nums[i].rx_irq_num_state =
+				IPC_RX_IRQ_DISABLED;
+		}
 	}
 
 	tasklet_schedule(&ipc_shm_rx_tasklet);
@@ -130,7 +168,8 @@ int8_t ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
 	struct device_node *mscm = NULL;
 	struct resource *res;
 	int err;
-	int i;
+	uint8_t rx_irq_index;
+	bool rx_irq_duplicated;
 
 	if (!rx_cb)
 		return -EINVAL;
@@ -174,7 +213,9 @@ int8_t ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
 	priv.id[instance].shm_size = cfg->shm_size;
 	priv.id[instance].local_phys_shm = cfg->local_shm_addr;
 	priv.id[instance].remote_phys_shm = cfg->remote_shm_addr;
-	priv.rx_cb = rx_cb;
+	priv.id[instance].rx_cb = rx_cb;
+	ipc_rx_irq_nums[instance].rx_irq_num = IPC_INVALID_IRQ;
+	ipc_rx_irq_nums[instance].rx_irq_num_state = IPC_RX_IRQ_ENABLED;
 
 	if (cfg->inter_core_rx_irq == IPC_IRQ_NONE) {
 		priv.id[instance].irq_num = IPC_IRQ_NONE;
@@ -191,25 +232,30 @@ int8_t ipc_os_init(const uint8_t instance, const struct ipc_shm_cfg *cfg,
 		shm_dbg("Rx IRQ of instance %d = %d\n",
 			instance, priv.id[instance].irq_num);
 		of_node_put(mscm); /* release refcount to mscm DT node */
-	}
 
-	/* check duplicate irq number */
-	for (i = 0; i < IPC_SHM_MAX_INSTANCES; i++) {
-		if (priv.id[instance].irq_num == priv.irq_num_init[i]) {
-			priv.id[instance].state = IPC_SHM_INSTANCE_ENABLED;
-			return 0;
+		/* populate ipc_rx_irq_nums with cfg->inter_core_rx_irq */
+		rx_irq_duplicated = false;
+		for (rx_irq_index = 0; rx_irq_index < IPC_SHM_MAX_INSTANCES;
+				rx_irq_index++) {
+			if (ipc_rx_irq_nums[rx_irq_index].rx_irq_num ==
+					priv.id[instance].irq_num) {
+				rx_irq_duplicated = true;
+				break;
+			}
 		}
-	}
-	priv.irq_num_init[instance] = priv.id[instance].irq_num;
 
-	if (priv.id[instance].irq_num != IPC_IRQ_NONE) {
-		/* init rx interrupt */
-		err = request_irq(priv.id[instance].irq_num, ipc_shm_hardirq,
-			0, DRIVER_NAME, &priv);
-		if (err) {
-			shm_err("Request interrupt %d failed\n",
-				priv.id[instance].irq_num);
-			goto err_unmap_remote_shm;
+		if (rx_irq_duplicated == false) {
+			ipc_rx_irq_nums[instance].rx_irq_num =
+				priv.id[instance].irq_num;
+
+			/* init rx interrupt */
+			err = request_irq(priv.id[instance].irq_num,
+				ipc_shm_hardirq, 0, DRIVER_NAME, &priv);
+			if (err) {
+				shm_err("Request interrupt %d failed\n",
+					priv.id[instance].irq_num);
+				goto err_unmap_remote_shm;
+			}
 		}
 	}
 
@@ -234,16 +280,33 @@ err_release_local_region:
  */
 void ipc_os_free(const uint8_t instance)
 {
-	uint8_t inst_id = 0;
+	int irq_num = 0;
+	uint8_t i = 0;
+	bool irq_num_is_used = false;
 
 	priv.id[instance].state = IPC_SHM_INSTANCE_DISABLED;
-	/* disable hardirq */
-	ipc_hw_irq_disable(instance);
 
-	/* only free irq if irq number is requested */
-	if (priv.irq_num_init[instance] != 0) {
-		free_irq(priv.id[instance].irq_num, &priv);
-		priv.irq_num_init[instance] = 0;
+	irq_num = priv.id[instance].irq_num;
+	priv.id[instance].irq_num = IPC_INVALID_IRQ;
+
+	/* check if irq_num is used by another instance */
+	for (i = 0; i < IPC_SHM_MAX_INSTANCES; i++) {
+		if (priv.id[i].irq_num == irq_num) {
+			irq_num_is_used = true;
+			break;
+		}
+	}
+
+	/* if not another instance is used, disabled and free the irq_num */
+	if (irq_num_is_used == false) {
+		/* disable hardirq */
+		ipc_hw_irq_disable(instance);
+
+		/* mark IRQ as disabled */
+		ipc_rx_irq_nums[instance].rx_irq_num = IPC_INVALID_IRQ;
+
+		/* free the interrupt allocated with request_irq */
+		free_irq(irq_num, &priv);
 	}
 
 	iounmap((void *)priv.id[instance].remote_virt_shm);
@@ -253,11 +316,13 @@ void ipc_os_free(const uint8_t instance)
 	release_mem_region((phys_addr_t)priv.id[instance].local_phys_shm,
 		priv.id[instance].shm_size);
 
-	for (inst_id = 0; inst_id < IPC_SHM_MAX_INSTANCES; inst_id++) {
-		if (priv.id[inst_id].state == IPC_SHM_INSTANCE_ENABLED)
+	/* check if there is an IRQ still used */
+	for (i = 0; i < IPC_SHM_MAX_INSTANCES; i++) {
+		if (ipc_rx_irq_nums[i].rx_irq_num_state != IPC_INVALID_IRQ)
 			return;
 	}
-	/* kill softirq task */
+
+	/* kill softirq task if no IRQ is used */
 	tasklet_kill(&ipc_shm_rx_tasklet);
 }
 
@@ -326,8 +391,9 @@ int8_t ipc_os_poll_channels(const uint8_t instance)
 {
 	/* the softirq will handle rx operation if rx interrupt is configured */
 	if (priv.id[instance].irq_num == IPC_IRQ_NONE) {
-		if (priv.rx_cb != NULL)
-			return priv.rx_cb(instance, IPC_SOFTIRQ_BUDGET);
+		if (priv.id[instance].rx_cb != NULL)
+			return
+			priv.id[instance].rx_cb(instance, IPC_SOFTIRQ_BUDGET);
 		return -EINVAL;
 	}
 
