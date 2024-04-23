@@ -182,7 +182,7 @@ void ipc_queue_free(struct ipc_queue *queue)
 	if (queue == NULL)
 		return;
 
-	if (queue->push_ring != NULL)
+	if (queue->push_ring == NULL)
 		return;
 
 	if ((queue->push_ring->sentinel == IPC_QUEUE_INIT_DONE)
