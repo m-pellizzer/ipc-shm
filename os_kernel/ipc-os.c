@@ -361,7 +361,9 @@ static void __exit shm_mod_exit(void)
 	tasklet_kill(&ipc_shm_rx_tasklet);
 }
 
+EXPORT_SYMBOL(ipc_shm_init_instance);
 EXPORT_SYMBOL(ipc_shm_init);
+EXPORT_SYMBOL(ipc_shm_free_instance);
 EXPORT_SYMBOL(ipc_shm_free);
 EXPORT_SYMBOL(ipc_shm_acquire_buf);
 EXPORT_SYMBOL(ipc_shm_release_buf);
