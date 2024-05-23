@@ -448,6 +448,7 @@ void ipc_os_free(const uint8_t instance)
 	}
 	close(ipc_os_priv.ipc_cdev_fd);
 	close(ipc_os_priv.dev_mem_fd);
+	ipc_os_priv.ipc_files_opened = IPC_STATUS_CLEAR;
 
 	/* unload ipc-uio kernel module */
 	if (delete_module(IPC_UIO_MODULE_NAME, O_NONBLOCK) != 0) {

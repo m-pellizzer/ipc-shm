@@ -335,6 +335,7 @@ void ipc_os_free(const uint8_t instance)
 		priv.ipc_soft_created = (uint8_t)IPC_STATUS_CLEAR;
 		close(priv.ipc_usr_fd);
 		close(priv.dev_mem_fd);
+		priv.ipc_files_opened = IPC_STATUS_CLEAR;
 		/* unload ipc-shm-usr kernel module */
 		if (delete_module(IPC_ISR_MODULE_NAME, O_NONBLOCK) != 0)
 			shm_err("Can't unload %s module\n",
